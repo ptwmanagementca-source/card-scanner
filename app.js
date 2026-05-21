@@ -115,6 +115,8 @@ let ocrWorker = null;
 async function getWorker() {
   if (!ocrWorker) {
     ocrWorker = await Tesseract.createWorker('eng');
+    // PSM 11 = sparse text, best for business cards with scattered layout
+    await ocrWorker.setParameters({ tessedit_pageseg_mode: '11' });
   }
   return ocrWorker;
 }
@@ -137,21 +139,61 @@ function compressImage(dataUrl, maxDim = 1600) {
   });
 }
 
-function grayscale(dataUrl) {
+// Otsu's method: finds the optimal threshold to split foreground/background
+function otsuThreshold(gray) {
+  const hist = new Uint32Array(256);
+  for (const v of gray) hist[v]++;
+  const total = gray.length;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sumB = 0, wB = 0, maxVar = 0, threshold = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const v = wB * wF * (mB - mF) ** 2;
+    if (v > maxVar) { maxVar = v; threshold = t; }
+  }
+  return threshold;
+}
+
+// Upscale + binarize: makes text pure black on white for best OCR results
+function preprocessForOCR(dataUrl) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
+      // Upscale so the long side is at least 2400px — Tesseract reads bigger images much better
+      const scale = Math.max(1, 2400 / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
       const c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
+      c.width = w; c.height = h;
       const ctx = c.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      const d = ctx.getImageData(0, 0, c.width, c.height);
-      for (let i = 0; i < d.data.length; i += 4) {
-        const v = 0.299 * d.data[i] + 0.587 * d.data[i+1] + 0.114 * d.data[i+2];
-        d.data[i] = d.data[i+1] = d.data[i+2] = v;
+      ctx.drawImage(img, 0, 0, w, h);
+
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const px = imgData.data;
+
+      // To grayscale
+      const gray = new Uint8Array(w * h);
+      for (let i = 0; i < px.length; i += 4) {
+        gray[i >> 2] = Math.round(0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]);
       }
-      ctx.putImageData(d, 0, 0);
-      resolve(c.toDataURL('image/jpeg', 0.95));
+
+      // Binarize with Otsu threshold — pure black/white, no gray
+      const t = otsuThreshold(gray);
+      for (let i = 0; i < px.length; i += 4) {
+        const v = gray[i >> 2] > t ? 255 : 0;
+        px[i] = px[i + 1] = px[i + 2] = v;
+        px[i + 3] = 255;
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      resolve(c.toDataURL('image/png')); // PNG keeps it lossless after binarization
     };
     img.src = dataUrl;
   });
@@ -206,7 +248,7 @@ document.getElementById('camera-input').addEventListener('change', async e => {
       const worker = await getWorker();
 
       setLoadingText('Reading card...');
-      const processed = await grayscale(compressed);
+      const processed = await preprocessForOCR(compressed);
       const { data: { text } } = await worker.recognize(processed);
 
       const parsed = parseText(text);
