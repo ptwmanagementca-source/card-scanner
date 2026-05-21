@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Card Scanner">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <title>Card Scanner</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Home -->
+  <div id="view-home" class="view active">
+    <div class="center">
+      <h1>Card Scanner</h1>
+      <p>Photograph a business card<br>to save it to Contacts</p>
+    </div>
+    <div class="bottom">
+      <button id="btn-scan" class="btn-primary">Scan Card</button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="view-loading" class="view">
+    <div class="center">
+      <img id="loading-photo" src="" alt="">
+      <div class="spinner"></div>
+      <p id="loading-msg" class="muted">Reading card...</p>
+    </div>
+  </div>
+
+  <!-- Review -->
+  <div id="view-review" class="view">
+    <div class="scroller">
+      <img id="review-photo" src="" alt="">
+      <div id="fields"></div>
+      <div class="notes-block">
+        <div class="field-label">NOTES</div>
+        <textarea id="field-notes" placeholder="Add a note..." rows="3"></textarea>
+      </div>
+      <div class="actions">
+        <button id="btn-save" class="btn-primary">Save to Contacts</button>
+        <button id="btn-rescan" class="btn-text">Scan again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Picker sheet -->
+  <div id="picker-overlay" class="picker-overlay hidden">
+    <div id="picker-sheet" class="picker-sheet">
+      <div class="sheet-handle"></div>
+      <div id="picker-title" class="picker-title"></div>
+      <div id="picker-list" class="picker-list"></div>
+      <button id="picker-cancel" class="sheet-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Hidden camera input -->
+  <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none">
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
