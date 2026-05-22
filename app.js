@@ -41,6 +41,20 @@ function fixCamelCase(str) {
   return str.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
 }
 
+// Title-case a string. Keeps short all-caps words as acronyms (LLC, DRE, CPC, VP…)
+function toTitleCase(str) {
+  if (!str) return str;
+  return str
+    .split(/\s+/)
+    .map(word => {
+      // 2-4 letter all-caps word → treat as acronym, leave alone
+      if (/^[A-Z]{2,4}$/.test(word)) return word;
+      // Everything else → Title Case
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
 // Email: OCR sometimes inserts spaces inside: "kathy.a. liu@chase.com"
 function extractEmail(rawText) {
   // Clean spaces around . and @ that OCR introduced, then match
@@ -120,27 +134,29 @@ function parseText(rawText) {
     if (license && LICENSE_RE.test(l)) used.add(l);
   }
 
-  // Company first — grab the ALLCAPS brand line before it gets claimed as name
+  // 1. Company — grab ALLCAPS brand line before anything else
   let company = '';
   for (const l of lines) {
-    if (!used.has(l) && isCompanyLike(l)) { company = l; used.add(l); break; }
+    if (!used.has(l) && isCompanyLike(l)) { company = toTitleCase(l); used.add(l); break; }
   }
 
-  let name = '';
-  for (const l of lines) {
-    if (!used.has(l) && isNameLike(l)) { name = fixCamelCase(l); used.add(l); break; }
-  }
-  // Fallback: first unused line, still apply CamelCase fix
-  if (!name) {
-    const f = lines.find(l => !used.has(l));
-    if (f) { name = fixCamelCase(f); used.add(f); }
-  }
-
+  // 2. Job title — must come before name so "Real Estate Agent" isn't claimed as a name
   let jobTitle = '';
   for (const l of lines) {
     if (!used.has(l) && TITLE_KEYWORDS.some(kw => l.toLowerCase().includes(kw))) {
-      jobTitle = l; used.add(l); break;
+      jobTitle = toTitleCase(l); used.add(l); break;
     }
+  }
+
+  // 3. Name — now safe, title keywords are already claimed
+  let name = '';
+  for (const l of lines) {
+    if (!used.has(l) && isNameLike(l)) { name = toTitleCase(fixCamelCase(l)); used.add(l); break; }
+  }
+  // Fallback: first unused line
+  if (!name) {
+    const f = lines.find(l => !used.has(l));
+    if (f) { name = toTitleCase(fixCamelCase(f)); used.add(f); }
   }
 
   // Company fallback: title-case multi-word line
@@ -150,7 +166,7 @@ function parseText(rawText) {
         const words = l.split(/\s+/);
         if (words.every(w => !w.length || (w[0] === w[0].toUpperCase() && /[a-zA-Z]/.test(w[0])))
             && words.length >= 2 && !/\d/.test(l) && !/@/.test(l)) {
-          company = l; used.add(l); break;
+          company = toTitleCase(l); used.add(l); break;
         }
       }
     }
