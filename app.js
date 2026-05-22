@@ -307,9 +307,11 @@ document.getElementById('btn-scan').addEventListener('click', () => {
   document.getElementById('camera-input').click();
 });
 
-document.getElementById('camera-input').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  e.target.value = '';
+document.getElementById('btn-library').addEventListener('click', () => {
+  document.getElementById('library-input').click();
+});
+
+async function processFile(file) {
   if (!file) return;
 
   const reader = new FileReader();
@@ -327,7 +329,6 @@ document.getElementById('camera-input').addEventListener('change', async e => {
       const processed = await preprocessForOCR(compressed);
       const { data: { text } } = await worker.recognize(processed);
 
-      // Quality gate: if OCR got almost nothing useful, ask for a retake
       const usefulCount = text.split('\n').map(l => l.trim()).filter(looksUseful).length;
       if (usefulCount < 2) {
         show('view-home');
@@ -349,6 +350,18 @@ document.getElementById('camera-input').addEventListener('change', async e => {
     }
   };
   reader.readAsDataURL(file);
+}
+
+document.getElementById('camera-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  processFile(file);
+});
+
+document.getElementById('library-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  processFile(file);
 });
 
 // ── Review ────────────────────────────────────────────────────────────────────

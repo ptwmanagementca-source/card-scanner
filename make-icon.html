@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Make Icon</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; height: 100vh; gap: 24px; background: #f5f5f7; }
+    canvas { border-radius: 22%; box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+    button { background: #007AFF; color: white; border: none; border-radius: 10px;
+             padding: 12px 32px; font-size: 16px; font-weight: 600; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <canvas id="c" width="512" height="512"></canvas>
+  <button onclick="download()">Download icon.png</button>
+  <script>
+    const c = document.getElementById('c');
+    const ctx = c.getContext('2d');
+
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    // Background
+    ctx.fillStyle = '#007AFF';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // White card
+    ctx.fillStyle = 'rgba(255,255,255,0.97)';
+    rr(64, 148, 384, 216, 20);
+    ctx.fill();
+
+    // Card shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.12)';
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = 'rgba(255,255,255,0.97)';
+    rr(64, 148, 384, 216, 20);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Name line (bold, longer)
+    ctx.fillStyle = '#1C1C1E';
+    rr(104, 192, 180, 18, 5);
+    ctx.fill();
+
+    // Title line (thinner, shorter)
+    ctx.fillStyle = '#8E8E93';
+    rr(104, 222, 120, 11, 4);
+    ctx.fill();
+
+    // Divider
+    ctx.fillStyle = '#E8E8ED';
+    ctx.fillRect(104, 252, 304, 1);
+
+    // Contact lines
+    ctx.fillStyle = '#8E8E93';
+    rr(104, 270, 90, 10, 3);  ctx.fill();
+    rr(104, 292, 160, 10, 3); ctx.fill();
+    rr(104, 314, 130, 10, 3); ctx.fill();
+
+    // Scan corner accent (top right of card)
+    ctx.strokeStyle = '#007AFF';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+
+    // Top-right L bracket
+    const bx = 392, by = 164, bs = 28;
+    ctx.beginPath(); ctx.moveTo(bx - bs, by); ctx.lineTo(bx, by); ctx.lineTo(bx, by + bs);
+    ctx.stroke();
+
+    // Bottom-left L bracket
+    const cx2 = 80, cy2 = 348, cs = 28;
+    ctx.beginPath(); ctx.moveTo(cx2 + cs, cy2); ctx.lineTo(cx2, cy2); ctx.lineTo(cx2, cy2 - cs);
+    ctx.stroke();
+
+    function download() {
+      const a = document.createElement('a');
+      a.download = 'icon.png';
+      a.href = c.toDataURL('image/png');
+      a.click();
+    }
+  </script>
+</body>
+</html>

@@ -21,6 +21,7 @@
     </div>
     <div class="bottom">
       <button id="btn-scan" class="btn-primary">Scan Card</button>
+      <button id="btn-library" class="btn-link">From Photos</button>
       <p class="tip">Flat surface &nbsp;·&nbsp; fill the frame &nbsp;·&nbsp; good light</p>
     </div>
   </div>
@@ -60,8 +61,9 @@
     </div>
   </div>
 
-  <!-- Hidden camera input -->
-  <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none">
+  <!-- Hidden inputs -->
+  <input type="file" id="camera-input"  accept="image/*" capture="environment" style="display:none">
+  <input type="file" id="library-input" accept="image/*" style="display:none">
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="app.js"></script>

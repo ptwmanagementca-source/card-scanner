@@ -30,7 +30,7 @@ html, body {
 /* ── Home ── */
 #view-home {
   justify-content: space-between;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 56px);
   padding-left: 24px;
   padding-right: 24px;
 }
@@ -76,6 +76,22 @@ h1 {
 }
 .btn-primary:active { opacity: 0.75; }
 .btn-primary:disabled { opacity: 0.45; }
+
+.btn-link {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-size: 16px;
+  font-family: inherit;
+  padding: 12px 0 0;
+  cursor: pointer;
+  text-align: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-link:active { opacity: 0.5; }
 
 .tip {
   font-size: 13px;
