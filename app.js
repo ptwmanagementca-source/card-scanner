@@ -8,32 +8,74 @@ const TITLE_KEYWORDS = [
   'designer','founder','partner','sales','marketing','realtor','broker',
   'advisor','coordinator','specialist','executive','officer','supervisor',
   'lead','head','principal','senior','junior','assistant','administrator',
-  'representative','account',
+  'representative','account','lending','loan',
 ];
 
-const COMPANY_RE = /\b(Inc\.?|LLC|Corp\.?|Ltd\.?|Group|Properties|Realty|Associates|Partners|Solutions|Company|Agency|Services|Consulting|Management|Enterprise|Enterprises|Foundation|Institute|International|Worldwide|Holdings|Ventures|Capital|Trust|Bank|Law|Legal|Team)\b/i;
+const COMPANY_RE = /\b(Inc\.?|LLC|Corp\.?|Ltd\.?|Group|Properties|Realty|Associates|Partners|Solutions|Company|Agency|Services|Consulting|Management|Enterprise|Enterprises|Foundation|Institute|International|Worldwide|Holdings|Ventures|Capital|Trust|Bank|Law|Legal|Team|Lending|Financial|Mortgage|Insurance|Investments?|Advisors?)\b/i;
 const STREET_RE  = /\b(Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|Lane|Ln|Way|Court|Ct|Place|Pl|Parkway|Pkwy|Suite|Ste|Floor|Fl)\b\.?/i;
 const STATE_RE   = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
 const ZIP_RE     = /\b\d{5}(-\d{4})?\b/;
+// License number patterns — captured as their own field, excluded from company detection
+const LICENSE_RE = /\b(NMLS|DRE|BRE|NPN|CalBRE|CALDRE|License|Lic\.?)\b[\s#:IDid\.]*(\d+)/i;
+const JUNK_RE    = /\b(NMLS|DRE|BRE|NPN|CalBRE|CALDRE|EIN)\b[\s#:IDid\.]*\d+/i;
 
-function extractEmail(t) {
-  const m = t.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+// OCR often merges a logo (ALL CAPS) with the name on the same line: "CHASE) KathyLiu"
+// Split those into two separate lines so each can be parsed correctly.
+function splitMixedLines(lines) {
+  const out = [];
+  for (const line of lines) {
+    // Pattern: ALLCAPS word(s) followed by ) or space then a Title-case word
+    const m = line.match(/^([A-Z][A-Z\s]{1,30}?)\s*[)]\s*([A-Z][a-zA-Z].*)$/);
+    if (m) {
+      out.push(m[1].trim());   // e.g. "CHASE"
+      out.push(m[2].trim());   // e.g. "KathyLiu"
+    } else {
+      out.push(line);
+    }
+  }
+  return out;
+}
+
+// OCR sometimes drops the space in a name: "KathyLiu" → "Kathy Liu"
+function fixCamelCase(str) {
+  return str.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+}
+
+// Email: OCR sometimes inserts spaces inside: "kathy.a. liu@chase.com"
+function extractEmail(rawText) {
+  // Clean spaces around . and @ that OCR introduced, then match
+  const cleaned = rawText
+    .replace(/([a-zA-Z0-9_%+\-])\s+([._%+\-][a-zA-Z0-9])/g, '$1$2')
+    .replace(/([a-zA-Z0-9._%+\-])\s+@/g, '$1@')
+    .replace(/@\s+([a-zA-Z])/g, '@$1')
+    .replace(/\.\s+([a-zA-Z0-9])/g, '.$1');
+  const m = cleaned.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return m ? m[0] : '';
 }
 
-function extractPhone(t) {
+// Phone: strip fax lines entirely, then strip call prefixes like "T:", "Tel:"
+function extractPhone(rawText) {
+  const noFax = rawText.replace(/^.*\b(?:Fax|Facsimile)\b.*$/gim, '');
+  const stripped = noFax.replace(/\b(?:Tel|Telephone|Phone|Ph|Cell|Mobile|T|M|C)\.?\s*:/gi, '');
   const pats = [
     /\+?1?[\s.\-]?\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}/,
     /\(\d{3}\)\s*\d{3}[\s.\-]\d{4}/,
     /\d{3}[\s.\-]\d{3}[\s.\-]\d{4}/,
   ];
-  for (const p of pats) { const m = t.match(p); if (m) return m[0].trim(); }
+  for (const p of pats) { const m = stripped.match(p); if (m) return m[0].trim(); }
   return '';
 }
 
 function extractWebsite(t) {
   const m = t.match(/https?:\/\/[^\s]+|www\.[^\s]+/i);
   return m ? m[0] : '';
+}
+
+function extractLicense(rawText) {
+  const m = rawText.match(LICENSE_RE);
+  if (!m) return '';
+  const prefix = m[1].toUpperCase().replace(/LIC\.?/, 'License');
+  return `${prefix} #${m[2]}`;
 }
 
 function isNameLike(line) {
@@ -43,13 +85,16 @@ function isNameLike(line) {
   if (t === t.toUpperCase() && t.length > 4) return false;
   const words = t.split(/\s+/);
   if (words.length < 2 || words.length > 4) return false;
+  // Each word starts with uppercase
   return words.every(w => w.length && w[0] === w[0].toUpperCase() && /[a-zA-Z]/.test(w[0]));
 }
 
 function isCompanyLike(line) {
   const t = line.trim();
-  if (!t || /@/.test(t)) return false;
-  return (t === t.toUpperCase() && /[A-Z]/.test(t) && t.length > 2) || COMPANY_RE.test(t);
+  if (!t || /@/.test(t) || JUNK_RE.test(t)) return false;
+  // Pure ALL CAPS word(s) with no digits = strong company signal
+  const allCaps = t === t.toUpperCase() && /[A-Z]{2,}/.test(t) && !/\d/.test(t);
+  return allCaps || COMPANY_RE.test(t);
 }
 
 function isAddressLike(line) {
@@ -61,21 +106,35 @@ function parseText(rawText) {
   const email   = extractEmail(rawText);
   const phone   = extractPhone(rawText);
   const website = extractWebsite(rawText);
+  const license = extractLicense(rawText);
 
-  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  const rawLines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  // Split logo+name merged lines before parsing
+  const lines = splitMixedLines(rawLines);
   const used  = new Set();
 
   for (const l of lines) {
-    if (email   && l.includes(email)) used.add(l);
+    if (email   && l.replace(/\s/g,'').includes(email.replace(/\s/g,''))) used.add(l);
     if (phone   && l.replace(/\D/g,'').includes(phone.replace(/\D/g,'').slice(0,7))) used.add(l);
     if (website && l.includes(website.replace(/https?:\/\//,'').split('/')[0])) used.add(l);
+    if (license && LICENSE_RE.test(l)) used.add(l);
+  }
+
+  // Company first — grab the ALLCAPS brand line before it gets claimed as name
+  let company = '';
+  for (const l of lines) {
+    if (!used.has(l) && isCompanyLike(l)) { company = l; used.add(l); break; }
   }
 
   let name = '';
   for (const l of lines) {
-    if (!used.has(l) && isNameLike(l)) { name = l; used.add(l); break; }
+    if (!used.has(l) && isNameLike(l)) { name = fixCamelCase(l); used.add(l); break; }
   }
-  if (!name) { const f = lines.find(l => !used.has(l)); if (f) { name = f; used.add(f); } }
+  // Fallback: first unused line, still apply CamelCase fix
+  if (!name) {
+    const f = lines.find(l => !used.has(l));
+    if (f) { name = fixCamelCase(f); used.add(f); }
+  }
 
   let jobTitle = '';
   for (const l of lines) {
@@ -84,13 +143,10 @@ function parseText(rawText) {
     }
   }
 
-  let company = '';
-  for (const l of lines) {
-    if (!used.has(l) && isCompanyLike(l)) { company = l; used.add(l); break; }
-  }
+  // Company fallback: title-case multi-word line
   if (!company) {
     for (const l of lines) {
-      if (!used.has(l)) {
+      if (!used.has(l) && !JUNK_RE.test(l)) {
         const words = l.split(/\s+/);
         if (words.every(w => !w.length || (w[0] === w[0].toUpperCase() && /[a-zA-Z]/.test(w[0])))
             && words.length >= 2 && !/\d/.test(l) && !/@/.test(l)) {
@@ -105,7 +161,7 @@ function parseText(rawText) {
     if (!used.has(l) && isAddressLike(l)) { addrLines.push(l); used.add(l); }
   }
 
-  return { name, jobTitle, company, phone, email, website, address: addrLines.join(', '), rawLines: lines };
+  return { name, jobTitle, license, company, phone, email, website, address: addrLines.join(', '), rawLines };
 }
 
 // ── OCR ───────────────────────────────────────────────────────────────────────
@@ -203,8 +259,9 @@ function preprocessForOCR(dataUrl) {
 
 const FIELDS = [
   { key: 'name',     label: 'Name',    required: true,  inputMode: 'text' },
-  { key: 'jobTitle', label: 'Title',   required: false, inputMode: 'text' },
-  { key: 'company',  label: 'Company', required: false, inputMode: 'text' },
+  { key: 'jobTitle', label: 'Title',     required: false, inputMode: 'text' },
+  { key: 'license',  label: 'License #', required: false, inputMode: 'text' },
+  { key: 'company',  label: 'Company',   required: false, inputMode: 'text' },
   { key: 'phone',    label: 'Phone',   required: false, inputMode: 'tel' },
   { key: 'email',    label: 'Email',   required: false, inputMode: 'email' },
   { key: 'website',  label: 'Website', required: false, inputMode: 'url' },
@@ -224,6 +281,9 @@ function show(id) {
 function setLoadingText(msg) {
   document.getElementById('loading-msg').textContent = msg;
 }
+
+// Pre-warm Tesseract silently on page load so the first scan is instant
+window.addEventListener('load', () => getWorker().catch(() => {}));
 
 // ── Scan flow ─────────────────────────────────────────────────────────────────
 
@@ -251,9 +311,17 @@ document.getElementById('camera-input').addEventListener('change', async e => {
       const processed = await preprocessForOCR(compressed);
       const { data: { text } } = await worker.recognize(processed);
 
+      // Quality gate: if OCR got almost nothing useful, ask for a retake
+      const usefulCount = text.split('\n').map(l => l.trim()).filter(looksUseful).length;
+      if (usefulCount < 2) {
+        show('view-home');
+        alert('Couldn\'t read the card clearly.\n\nTips:\n• Lay it flat on a dark surface\n• Fill the whole frame\n• Make sure it\'s in focus');
+        return;
+      }
+
       const parsed = parseText(text);
       rawLines = parsed.rawLines;
-      contact  = { ...parsed, notes: '' };
+      contact  = { ...parsed, license: parsed.license || '', notes: '' };
       delete contact.rawLines;
 
       renderReview();
@@ -319,13 +387,35 @@ function renderReview() {
 
 // ── Picker ────────────────────────────────────────────────────────────────────
 
+// Keep a line if it looks like real card content, not an OCR fragment.
+function looksUseful(line) {
+  const t = line.trim();
+  if (t.length < 4) return false;
+
+  // Always keep lines with clear structured data
+  if (/@/.test(t))                         return true; // email
+  if (/https?:\/\/|www\./i.test(t))        return true; // URL
+  if (/\d{3}[\s.\-]\d{3}/.test(t))        return true; // phone-like
+  if (/\b\d{5}\b/.test(t))                return true; // zip code
+  if (LICENSE_RE.test(t))                  return true; // license number
+
+  // Text lines need at least one real word (3+ consecutive letters)
+  if (!/[a-zA-Z]{3,}/.test(t)) return false;
+
+  // And a reasonable letter density — filters "4,b" or "a:b 12"
+  const letters = (t.match(/[a-zA-Z]/g) || []).length;
+  if (letters / t.length < 0.35) return false;
+
+  return true;
+}
+
 function openPicker(fieldKey, fieldLabel) {
   activePickerField = fieldKey;
   document.getElementById('picker-title').textContent = fieldLabel;
 
   const list = document.getElementById('picker-list');
   list.innerHTML = '';
-  rawLines.forEach(line => {
+  rawLines.filter(looksUseful).forEach(line => {
     const btn = document.createElement('button');
     btn.className = 'picker-item';
     btn.textContent = line;
@@ -393,7 +483,8 @@ function buildVCF(c) {
   if (c.email)    rows.push(`EMAIL;TYPE=WORK:${esc(c.email)}`);
   if (c.website)  rows.push(`URL:${esc(c.website)}`);
   if (c.address)  rows.push(`ADR;TYPE=WORK:;;${esc(c.address)};;;;`);
-  if (c.notes)    rows.push(`NOTE:${esc(c.notes)}`);
+  const noteParts = [c.license, c.notes].filter(Boolean);
+  if (noteParts.length) rows.push(`NOTE:${esc(noteParts.join(' | '))}`);
   rows.push('END:VCARD');
   return rows.join('\r\n');
 }

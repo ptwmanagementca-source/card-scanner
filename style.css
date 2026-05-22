@@ -77,6 +77,14 @@ h1 {
 .btn-primary:active { opacity: 0.75; }
 .btn-primary:disabled { opacity: 0.45; }
 
+.tip {
+  font-size: 13px;
+  color: #C7C7CC;
+  text-align: center;
+  margin-top: 12px;
+  letter-spacing: 0.1px;
+}
+
 .btn-text {
   background: none;
   border: none;
